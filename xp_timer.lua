@@ -11,6 +11,10 @@ xpt_frame:RegisterEvent("ADDON_LOADED");
 xpt_frame:RegisterEvent("PLAYER_XP_UPDATE");
 xpt_frame:RegisterEvent("PLAYER_LOGIN");
 xpt_frame:RegisterEvent("PLAYER_MONEY");
+
+xpt_frame:RegisterEvent("PLAYER_ENTERING_WORLD");
+
+
 xpt_frame:SetScript("OnEvent",
 function(self,event,...) 
 	if xpt[event] and type(xpt[event]) == "function" then
@@ -76,7 +80,6 @@ end
 
 function xpt:ADDON_LOADED(...)
 	local addon = ...
-	--DEFAULT_CHAT_FRAME:AddMessage("Loading: "..addon,0.18,0.3,0.29);
 	if addon == "xp_timer" then
 		if type(xpt_global_data) ~= "table" then
 			xpt_global_data  = xpt_global_data_defaults;
@@ -345,6 +348,16 @@ function xpt:status()
 	else
 		DEFAULT_CHAT_FRAME:AddMessage("Cash updates will |cffff0000not|r show every time you gain gold");
 	end
+end
+
+function xpt:PLAYER_ENTERING_WORLD()
+	posX, posY = GetPlayerMapPosition("unit");
+	if (posX == 0 and posY == 0) then
+		DEFAULT_CHAT_FRAME:AddMessage("Entering Dungeon")
+	else
+		DEFAULT_CHAT_FRAME:AddMessage(string.format("Not Entering Dungeon %d , %d",posX,posY))
+	end
+		
 end
 
 

@@ -7,13 +7,15 @@ local xpt = {};
 local xpt_global_data_defaults = {};
 local xpt_character_data_defaults = {};
 local xpt_frame = CreateFrame("Frame");
+local wasinparty = false;
 xpt_frame:RegisterEvent("ADDON_LOADED");
 xpt_frame:RegisterEvent("PLAYER_XP_UPDATE");
 xpt_frame:RegisterEvent("PLAYER_LOGIN");
 xpt_frame:RegisterEvent("PLAYER_MONEY");
 
+xpt_frame:RegisterEvent("GROUP_ROSTER_UPDATE");
 xpt_frame:RegisterEvent("LFG_PROPOSAL_SUCCEEDED");
-
+xpt_frame:RegisterEvent("LFG_COMPLETION_REWARD");
 
 xpt_frame:SetScript("OnEvent",
 function(self,event,...) 
@@ -57,6 +59,26 @@ function xp_util.to_gsc_string(copper)
 	ret = "-" .. ret;
   end
   return ret;
+end
+
+
+-- Check if we join a party/raid.
+-- Thank you skada for the inspiration
+local function check_for_join_and_leave()
+	if IsInGroup() and wasinparty == false then -- if nil this is first check after reload/relog
+		-- We joined a raid/party.
+		-- remember this time
+		DEFAULT_CHAT_FRAME:AddMessage("You are in a group /xpt party to see a report")
+		 xpt:party_start()
+	end
+
+	if not IsInGroup() and wasinparty then
+		DEFAULT_CHAT_FRAME:AddMessage("You left a group")
+		xpt:party()
+		xpt:party_end()
+	end
+	-- Mark our last party status.
+	wasinparty = not not IsInGroup()
 end
 
 function xpt:handle_slashes(msg)
@@ -214,21 +236,38 @@ function xpt:PLAYER_MONEY(...)
 end
 
 
-function xpt:ct(...)
+function xpt:ct(msg)
+  local command, rest = msg:match("^(%S*)%s*(.-)$");
+				if command == "" then
+					self:ctdefault();
+				elseif command == "on" or command == "off" then
+					self:ctdefault(msg);
+				else
+					if self[command] and type(self[command]) == "function"  then
+						return self[command](self,rest)
+					else
+					   self:ctdefault(msg);
+					end
+				end
+end
+
+
+function xpt:ctdefault(...)
 	local timespan = ...;
 	local include_timespan  = false;
 	if tonumber(timespan) ~= nil then
 		include_timespan = true;
 		timespan = tonumber(timespan) * 60;
-	end
-	if (timespan == "off") then
+	elseif (timespan == "off") then
 		xpt_global_data.show_cash_on_earn = false;
 		DEFAULT_CHAT_FRAME:AddMessage("Cash display |cffff0000disabled|r");
-	end
-	if (timespan == "on") then
+	elseif (timespan == "on") then
 		xpt_global_data.show_cash_on_earn = true;
 		DEFAULT_CHAT_FRAME:AddMessage("Cash display |cff00ff00enabled|r");
 	end
+	
+
+	
 	local current_time = math.floor(GetTime());
 	local cash_time_diff = current_time - self.cash_time_last_paid ;
 	self.cash_time_last_paid = current_time;
@@ -290,6 +329,7 @@ function xpt:reset()
 	self.time_till_next_level = 86400;
 	self.xp_gained = 1;
 	self.xp_diff = 1;
+	check_for_join_and_leave()
     if (self.how_time_on_xp == nil) then
         xpt_global_data.show_time_on_xp = true;
     end
@@ -349,24 +389,17 @@ function xpt:status()
 	end
 end
 
-function xpt:PLAYER_ENTERING_WORLD()
-	posX, posY = GetPlayerMapPosition("unit");
-	if (posX == 0 and posY == 0) then
-		DEFAULT_CHAT_FRAME:AddMessage("Entering Dungeon")
-	else
-		DEFAULT_CHAT_FRAME:AddMessage(string.format("Not Entering Dungeon %d , %d",posX,posY))
-	end
-end
 
 
 function xpt:LFG_PROPOSAL_SUCCEEDED()
 	-- if you where already in a group this is pretty close to when you will start a new LFG
+	DEFAULT_CHAT_FRAME:AddMessage("Restarting group timer for LFG")
 	xpt:party_start()
 end
 
---LFG is done
+--LFG is done show a report
 function xpt:LFG_COMPLETION_REWARD()
-	xpt:party_end()
+	xpt:party()
 end
 
 
@@ -379,54 +412,45 @@ end
 
 --reset values
 function xpt:party_end()
-	DEFAULT_CHAT_FRAME:AddMessage("XP Group Ended")
-	xpt:party()
 	self.group_start = 0;
+	self.group_xp_total = 0;
 end
 
--- Check if we join a party/raid.
--- Thank you skada for the inspiration
-local function check_for_join_and_leave()
-	if IsInGroup() and wasinparty == false then -- if nil this is first check after reload/relog
-		-- We joined a raid/party.
-		-- remember this time
-		DEFAULT_CHAT_FRAME:AddMessage("Starting Group XP Timer use /xpt party to see a report")
-		 xpt:party_start()
-	end
-
-	if not IsInGroup() and wasinparty then
-		DEFAULT_CHAT_FRAME:AddMessage("You left a group /xpt party to see a report")
-		xpt:party_end()
-	end
-	-- Mark our last party status.
-	wasinparty = not not IsInGroup()
-end
 
 function xpt:party()
-	if self.group_start = 0 then
-		DEFAULT_CHAT_FRAME:AddMessage("I'm sorry I don't know when you started the party. If you reloaded your UI it will reset this value.")
-	else
-		local time_diff = GetTime() - self.start_time;
-		local party_xp = self.xp_gained - self.group_xp_total
+	if self.group_start ~= 0 then
+		local time_diff = GetTime() - self.group_start;
 		DEFAULT_CHAT_FRAME:AddMessage("Time in party: "..xp_util.to_hms_string(time_diff));
 		--if there is no party xp then xp is turned off or they have hit max level
-		if party_xp > 0 then 
+		if self.group_xp_total ~= nil and party_xp > 0 then 
+			local party_xp = self.xp_gained - 	
 			DEFAULT_CHAT_FRAME:AddMessage("XP Gained in party: "..party_xp);
 			local xp_cur = UnitXP("player");
 			local dungeons_to_lvl = math.ceil((UnitXPMax("player") - xp_cur) / party_xp);
 			DEFAULT_CHAT_FRAME:AddMessage("Dungeons to next level: "..dungeons_to_lvl);
 		end
-		
+		local cash_in_party = 0;
+		--update the time for cash tracking.
+		local current_time = math.floor(GetTime());
+		local cash_time_diff = current_time - self.cash_time_last_paid ;
+		self.cash_time_last_paid = current_time;
+		xpt_character_data.cash_running_time = xpt_character_data.cash_running_time + cash_time_diff;
 		for cash_time,cash_made in pairs(xpt_character_data.cash_values_array) do
 		 local timeOffset = xpt_character_data.cash_running_time - cash_time
 		 if (timeOffset < time_diff)then
+			--DEFAULT_CHAT_FRAME:AddMessage(string.format("TimeOffset %s time_diff %s",timeOffset,time_diff));
+			--DEFAULT_CHAT_FRAME:AddMessage(string.format("Cash in party: %s ",xp_util.to_gsc_string(cash_in_party)));
 			cash_in_party = cash_in_party + cash_made;
+			
 		 end
 		 --memory cleanup
 		 if (timeOffset > 86400) then
 			table.remove(xpt_character_data.cash_values_array,cash_time);
 		 end
 		 --done memory cleanup
+		end
+		if cash_in_party > 0 then
+			DEFAULT_CHAT_FRAME:AddMessage(string.format("Cash in party: %s ",xp_util.to_gsc_string(cash_in_party)));
 		end
 		
 	end
@@ -439,3 +463,4 @@ end
 function xpt:GROUP_ROSTER_UPDATE()
 	check_for_join_and_leave()
 end
+

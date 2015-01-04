@@ -157,7 +157,7 @@ function xpt:default()
     local time_diff = GetTime() - self.start_time;
 	DEFAULT_CHAT_FRAME:AddMessage("Time Online: "..xp_util.to_hms_string(time_diff));
 	DEFAULT_CHAT_FRAME:AddMessage("XP Gained total: "..self.xp_gained);
-	DEFAULT_CHAT_FRAME:AddMessage("XP Gained: "..self.xp_diff);
+	DEFAULT_CHAT_FRAME:AddMessage("XP Last Gained: "..self.xp_diff);
 	local xp_per_second = self.xp_gained / time_diff;
 	DEFAULT_CHAT_FRAME:AddMessage("XP per second: "..xp_per_second);
 	local xp_cur = UnitXP("player");
@@ -298,11 +298,12 @@ end
 function xpt:help(msg)
 	DEFAULT_CHAT_FRAME:AddMessage("XP Timer Usage:");
 	DEFAULT_CHAT_FRAME:AddMessage("/xpt help -- this help");
-	DEFAULT_CHAT_FRAME:AddMessage("/xpt -- Get information about the XP you have gained sinse");
-	DEFAULT_CHAT_FRAME:AddMessage("/xpt reset -- reset your xp timer. great for you leave town or start a dungeon");
+	DEFAULT_CHAT_FRAME:AddMessage("/xpt -- Get information about the XP you have gained");
+	DEFAULT_CHAT_FRAME:AddMessage("/xpt reset -- reset your XP timer. great for you leave town or start a dungeon");
 	DEFAULT_CHAT_FRAME:AddMessage("/xpt hour -- xp gained average per hour if logged in for more than an hour");
 	DEFAULT_CHAT_FRAME:AddMessage("/xpt cash OR /ct -- show how much gold you have gained in the past 24 hours");
-	DEFAULT_CHAT_FRAME:AddMessage("/xpt off OR /xpt on -- disbale or enable the status message on new xp");
+	DEFAULT_CHAT_FRAME:AddMessage("/xpt off OR /xpt on -- disable or enable the status message on new XP");
+	DEFAULT_CHAT_FRAME:AddMessage("/xpt party OR /xpt group -- Find information on the current group.");
 	DEFAULT_CHAT_FRAME:AddMessage("/ct time -- How much gold in the last 'time' minutes. Max 24 hours");
 	DEFAULT_CHAT_FRAME:AddMessage("/ct on OR /ct off -- turn on (off by default) reports on gold earned to blizzard style");
 end
@@ -355,23 +356,33 @@ function xpt:PLAYER_ENTERING_WORLD()
 	else
 		DEFAULT_CHAT_FRAME:AddMessage(string.format("Not Entering Dungeon %d , %d",posX,posY))
 	end
-		
 end
 
 
 function xpt:LFG_PROPOSAL_SUCCEEDED()
 	-- if you where already in a group this is pretty close to when you will start a new LFG
+	xpt:party_start()
+end
+
+--LFG is done
+function xpt:LFG_COMPLETION_REWARD()
+	xpt:party_end()
+end
+
+
+function xpt:party_start()
 	DEFAULT_CHAT_FRAME:AddMessage("Starting Dungeon XP Timer use /xpt party to see a report")
 	self.group_start = GetTime()
+	--I don't need to track party XP as I can subtract this value later
+	self.group_xp_total = xp_gained;
 end
 
-function xpt:LFG_COMPLETION_REWARD()
-	xpt:party();
-	
+--reset values
+function xpt:party_end()
+	DEFAULT_CHAT_FRAME:AddMessage("XP Group Ended")
+	xpt:party()
+	self.group_start = 0;
 end
-
-
-
 
 -- Check if we join a party/raid.
 -- Thank you skada for the inspiration
@@ -380,12 +391,12 @@ local function check_for_join_and_leave()
 		-- We joined a raid/party.
 		-- remember this time
 		DEFAULT_CHAT_FRAME:AddMessage("Starting Group XP Timer use /xpt party to see a report")
-		self.group_start = GetTime()
+		 xpt:party_start()
 	end
 
 	if not IsInGroup() and wasinparty then
 		DEFAULT_CHAT_FRAME:AddMessage("You left a group /xpt party to see a report")
-		xpt:party()
+		xpt:party_end()
 	end
 	-- Mark our last party status.
 	wasinparty = not not IsInGroup()
@@ -396,16 +407,33 @@ function xpt:party()
 		DEFAULT_CHAT_FRAME:AddMessage("I'm sorry I don't know when you started the party. If you reloaded your UI it will reset this value.")
 	else
 		local time_diff = GetTime() - self.start_time;
+		local party_xp = self.xp_gained - self.group_xp_total
 		DEFAULT_CHAT_FRAME:AddMessage("Time in party: "..xp_util.to_hms_string(time_diff));
-		DEFAULT_CHAT_FRAME:AddMessage("XP Gained total: "..self.xp_gained);
-		DEFAULT_CHAT_FRAME:AddMessage("XP Gained: "..self.xp_diff);
-		local xp_per_second = self.xp_gained / time_diff;
-		DEFAULT_CHAT_FRAME:AddMessage("XP per second: "..xp_per_second);
-		local xp_cur = UnitXP("player");
-		local kills_to_lvl = math.ceil((UnitXPMax("player") - xp_cur) / self.xp_diff);
-		DEFAULT_CHAT_FRAME:AddMessage("Kills to next level: "..kills_to_lvl);
-		DEFAULT_CHAT_FRAME:AddMessage(string.format("Time to next level: |cffff0000%s|r",xp_util.to_hms_string((UnitXPMax("player") - xp_cur) / xp_per_second)));
+		--if there is no party xp then xp is turned off or they have hit max level
+		if party_xp > 0 then 
+			DEFAULT_CHAT_FRAME:AddMessage("XP Gained in party: "..party_xp);
+			local xp_cur = UnitXP("player");
+			local dungeons_to_lvl = math.ceil((UnitXPMax("player") - xp_cur) / party_xp);
+			DEFAULT_CHAT_FRAME:AddMessage("Dungeons to next level: "..dungeons_to_lvl);
+		end
+		
+		for cash_time,cash_made in pairs(xpt_character_data.cash_values_array) do
+		 local timeOffset = xpt_character_data.cash_running_time - cash_time
+		 if (timeOffset < time_diff)then
+			cash_in_party = cash_in_party + cash_made;
+		 end
+		 --memory cleanup
+		 if (timeOffset > 86400) then
+			table.remove(xpt_character_data.cash_values_array,cash_time);
+		 end
+		 --done memory cleanup
+		end
+		
 	end
+end
+
+function xpt:group()
+	xpt:party()
 end
 
 function xpt:GROUP_ROSTER_UPDATE()

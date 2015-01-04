@@ -1,6 +1,6 @@
 ﻿-- Author      : jjacob
--- Create Date : 10/19/2008 5:28:33 PM
--- Updated	   : 07/05/2009 
+-- Create Date : 2008/01/18
+-- Updated	   : 2015/01/03
 
 
 local xpt = {};
@@ -12,7 +12,7 @@ xpt_frame:RegisterEvent("PLAYER_XP_UPDATE");
 xpt_frame:RegisterEvent("PLAYER_LOGIN");
 xpt_frame:RegisterEvent("PLAYER_MONEY");
 
-xpt_frame:RegisterEvent("PLAYER_ENTERING_WORLD");
+xpt_frame:RegisterEvent("LFG_PROPOSAL_SUCCEEDED");
 
 
 xpt_frame:SetScript("OnEvent",
@@ -123,7 +123,7 @@ function xpt:PLAYER_XP_UPDATE(...)
 	self.xp_gained = self.xp_gained + self.xp_diff;
 	-- find amount of time playing
 	local time_diff = GetTime() - self.start_time;
-	if (time_diff > 0) then -- incase xp is gained instantly upon login devide by zero is not fun
+	if (time_diff > 0) then -- incase xp is gained instantly upon login divide by zero is not fun
 		if (xpt_global_data.show_time_on_xp) then
 			local xp_last_checked_time = self.xp_checked_time; -- last time we got XP
 			self.xp_checked_time = GetTime();
@@ -132,7 +132,7 @@ function xpt:PLAYER_XP_UPDATE(...)
 			local xp_per_second = self.xp_gained / time_diff;
 			self.time_till_next_level = (UnitXPMax("player") - xp_cur) / xp_per_second
 			local estimate_inacuracy = last_estimated_time - self.time_till_next_level;
-			-- if estimate inacuracy is > 0 then the person is leveling faster than before if it is negative then they are going slower
+			-- if estimate inaccuracy is > 0 then the person is leveling faster than before if it is negative then they are going slower
 			--DEFAULT_CHAT_FRAME:AddMessage(string.format("estimate_inacuracy: |cffff0000%s|r %s",xp_util.to_hms_string(estimate_inacuracy),estimate_inacuracy),0.38,0.58,0.92);
 			if estimate_inacuracy > 60 then
 			-- fast
@@ -155,7 +155,7 @@ end
 
 function xpt:default()
     local time_diff = GetTime() - self.start_time;
-	DEFAULT_CHAT_FRAME:AddMessage("Time Logged IN: "..xp_util.to_hms_string(time_diff));
+	DEFAULT_CHAT_FRAME:AddMessage("Time Online: "..xp_util.to_hms_string(time_diff));
 	DEFAULT_CHAT_FRAME:AddMessage("XP Gained total: "..self.xp_gained);
 	DEFAULT_CHAT_FRAME:AddMessage("XP Gained: "..self.xp_diff);
 	local xp_per_second = self.xp_gained / time_diff;
@@ -285,6 +285,7 @@ function xpt:reset()
 	DEFAULT_CHAT_FRAME:AddMessage("XP Timer reset");
 	self.old_xp = UnitXP("player");
 	self.start_time = GetTime(); 
+	self.group_start = 0;
 	self.xp_checked_time = self.start_time;
 	self.time_till_next_level = 86400;
 	self.xp_gained = 1;
@@ -304,9 +305,6 @@ function xpt:help(msg)
 	DEFAULT_CHAT_FRAME:AddMessage("/xpt off OR /xpt on -- disbale or enable the status message on new xp");
 	DEFAULT_CHAT_FRAME:AddMessage("/ct time -- How much gold in the last 'time' minutes. Max 24 hours");
 	DEFAULT_CHAT_FRAME:AddMessage("/ct on OR /ct off -- turn on (off by default) reports on gold earned to blizzard style");
-	
-	
-	
 end
 
 function xpt:cash_timer_setup()
@@ -361,3 +359,55 @@ function xpt:PLAYER_ENTERING_WORLD()
 end
 
 
+function xpt:LFG_PROPOSAL_SUCCEEDED()
+	-- if you where already in a group this is pretty close to when you will start a new LFG
+	DEFAULT_CHAT_FRAME:AddMessage("Starting Dungeon XP Timer use /xpt party to see a report")
+	self.group_start = GetTime()
+end
+
+function xpt:LFG_COMPLETION_REWARD()
+	xpt:party();
+	
+end
+
+
+
+
+-- Check if we join a party/raid.
+-- Thank you skada for the inspiration
+local function check_for_join_and_leave()
+	if IsInGroup() and wasinparty == false then -- if nil this is first check after reload/relog
+		-- We joined a raid/party.
+		-- remember this time
+		DEFAULT_CHAT_FRAME:AddMessage("Starting Group XP Timer use /xpt party to see a report")
+		self.group_start = GetTime()
+	end
+
+	if not IsInGroup() and wasinparty then
+		DEFAULT_CHAT_FRAME:AddMessage("You left a group /xpt party to see a report")
+		xpt:party()
+	end
+	-- Mark our last party status.
+	wasinparty = not not IsInGroup()
+end
+
+function xpt:party()
+	if self.group_start = 0 then
+		DEFAULT_CHAT_FRAME:AddMessage("I'm sorry I don't know when you started the party. If you reloaded your UI it will reset this value.")
+	else
+		local time_diff = GetTime() - self.start_time;
+		DEFAULT_CHAT_FRAME:AddMessage("Time in party: "..xp_util.to_hms_string(time_diff));
+		DEFAULT_CHAT_FRAME:AddMessage("XP Gained total: "..self.xp_gained);
+		DEFAULT_CHAT_FRAME:AddMessage("XP Gained: "..self.xp_diff);
+		local xp_per_second = self.xp_gained / time_diff;
+		DEFAULT_CHAT_FRAME:AddMessage("XP per second: "..xp_per_second);
+		local xp_cur = UnitXP("player");
+		local kills_to_lvl = math.ceil((UnitXPMax("player") - xp_cur) / self.xp_diff);
+		DEFAULT_CHAT_FRAME:AddMessage("Kills to next level: "..kills_to_lvl);
+		DEFAULT_CHAT_FRAME:AddMessage(string.format("Time to next level: |cffff0000%s|r",xp_util.to_hms_string((UnitXPMax("player") - xp_cur) / xp_per_second)));
+	end
+end
+
+function xpt:GROUP_ROSTER_UPDATE()
+	check_for_join_and_leave()
+end

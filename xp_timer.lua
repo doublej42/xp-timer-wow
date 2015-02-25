@@ -390,12 +390,12 @@ function xpt:status()
 end
 
 
-
-function xpt:LFG_PROPOSAL_SUCCEEDED()
+-- tried to reset timer when a lfg started but it triggered when in a group, just removing for now
+--function xpt:LFG_PROPOSAL_SUCCEEDED()
 	-- if you where already in a group this is pretty close to when you will start a new LFG
-	DEFAULT_CHAT_FRAME:AddMessage("Restarting group timer for LFG")
-	xpt:party_start()
-end
+--	DEFAULT_CHAT_FRAME:AddMessage("Restarting group timer for LFG")
+--	xpt:party_start()
+--end
 
 --LFG is done show a report
 function xpt:LFG_COMPLETION_REWARD()
@@ -407,7 +407,7 @@ function xpt:party_start()
 	DEFAULT_CHAT_FRAME:AddMessage("Starting Dungeon XP Timer use /xpt party to see a report")
 	self.group_start = GetTime()
 	--I don't need to track party XP as I can subtract this value later
-	self.group_xp_total = xp_gained;
+	self.group_xp_total = self.xp_gained;
 end
 
 --reset values
@@ -422,8 +422,9 @@ function xpt:party()
 		local time_diff = GetTime() - self.group_start;
 		DEFAULT_CHAT_FRAME:AddMessage("Time in party: "..xp_util.to_hms_string(time_diff));
 		--if there is no party xp then xp is turned off or they have hit max level
+		local party_xp = self.xp_gained - self.group_xp_total
 		if self.group_xp_total ~= nil and party_xp > 0 then 
-			local party_xp = self.xp_gained - 	
+				
 			DEFAULT_CHAT_FRAME:AddMessage("XP Gained in party: "..party_xp);
 			local xp_cur = UnitXP("player");
 			local dungeons_to_lvl = math.ceil((UnitXPMax("player") - xp_cur) / party_xp);

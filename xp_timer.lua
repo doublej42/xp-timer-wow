@@ -344,6 +344,7 @@ function xpt:help(msg)
 	DEFAULT_CHAT_FRAME:AddMessage("/xpt cash OR /ct -- show how much gold you have gained in the past 24 hours");
 	DEFAULT_CHAT_FRAME:AddMessage("/xpt off OR /xpt on -- disable or enable the status message on new XP");
 	DEFAULT_CHAT_FRAME:AddMessage("/xpt party OR /xpt group -- Find information on the current group.");
+	DEFAULT_CHAT_FRAME:AddMessage("/xpt party_start OR /xpt party_end -- Manually start party tracking.");
 	DEFAULT_CHAT_FRAME:AddMessage("/ct time -- How much gold in the last 'time' minutes. Max 24 hours");
 	DEFAULT_CHAT_FRAME:AddMessage("/ct on OR /ct off -- turn on (off by default) reports on gold earned to blizzard style");
 end
@@ -414,6 +415,8 @@ end
 function xpt:party_end()
 	self.group_start = 0;
 	self.group_xp_total = 0;
+	xpt:party();
+	DEFAULT_CHAT_FRAME:AddMessage("Ending Dungeon XP Timer")
 end
 
 

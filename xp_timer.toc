@@ -1,4 +1,4 @@
-﻿## Interface: 90105
+﻿## Interface: 90200
 ## Title: XP Timer
 ## Notes: Track how long to next lvl and cash earned
 ## SavedVariablesPerCharacter:xpt_character_data

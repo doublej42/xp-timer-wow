@@ -9,5 +9,7 @@ How to use:
 /xpt
 /xpt help
 
+It also tracks gold so type /ct to see how much gold you've made in the past hour.
+
 
 I am always looking for suggestions and feature requests so don’t be shy to contact me at addon (at) phansoft.ca
